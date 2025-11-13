@@ -1,0 +1,101 @@
+
+version: '3.8'
+
+services:
+  products-db:
+    image: postgres:13
+    container_name: products-db
+    environment:
+      POSTGRES_DB: products_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    ports:
+      - "5433:5432"
+    volumes:
+      - products-data:/var/lib/postgresql/data
+
+  orders-db:
+    image: postgres:13
+    container_name: orders-db
+    environment:
+      POSTGRES_DB: orders_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    ports:
+      - "5434:5432"
+    volumes:
+      - orders-data:/var/lib/postgresql/data
+
+  products-service-1:
+    build:
+      context: ./Products.Service
+    container_name: products-service-1
+    depends_on:
+      - products-db
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Host=products-db;Database=products_db;Username=postgres;Password=postgres123
+      - ASPNETCORE_URLS=http://+:80
+    restart: on-failure
+
+  products-service-2:
+    build:
+      context: ./Products.Service
+    container_name: products-service-2
+    depends_on:
+      - products-db
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Host=products-db;Database=products_db;Username=postgres;Password=postgres123
+      - ASPNETCORE_URLS=http://+:80
+    restart: on-failure
+
+  orders-service:
+    build:
+      context: ./Orders.Service
+    container_name: orders-service
+    depends_on:
+      - orders-db
+      - load-balancer
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Host=orders-db;Database=orders_db;Username=postgres;Password=postgres123
+      - ProductsServiceUrl=http://load-balancer
+      - ASPNETCORE_URLS=http://+:80
+    restart: on-failure
+
+  load-balancer:
+    build:
+      context: ./LoadBalancer
+    container_name: load-balancer
+    ports:
+      - "8082:80"
+    depends_on:
+      - products-service-1
+      - products-service-2
+    restart: always
+
+  api-gateway:
+    build:
+      context: ./ApiGateway
+    container_name: api-gateway
+    ports:
+      - "8080:80"
+    depends_on:
+      - load-balancer
+      - orders-service
+    restart: always
+
+  frontend:
+    build:
+      context: ./Frontend
+    container_name: frontend
+    ports:
+      - "8081:80"
+    depends_on:
+      - api-gateway
+
+volumes:
+  products-data:
+  orders-data:
+

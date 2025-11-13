@@ -1,0 +1,132 @@
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.0.1
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:7.0.1
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.0.1
+    container_name: kafka-init
+    depends_on:
+      - kafka
+    command: >
+      bash -c "
+        echo 'Waiting for Kafka to be ready...' &&
+        cub kafka-ready -b kafka:29092 1 30 &&
+        echo 'Kafka is ready!' &&
+        kafka-topics --create --topic orders_topic --bootstrap-server kafka:29092 --partitions 1 --replication-factor 1
+      "
+    restart: on-failure
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    ports:
+      - "8090:8080"
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+
+  products-db:
+    image: postgres:13
+    container_name: products-db
+    environment:
+      POSTGRES_DB: products_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    ports:
+      - "5433:5432"
+    volumes:
+      - products-data:/var/lib/postgresql/data
+
+  orders-db:
+    image: postgres:13
+    container_name: orders-db
+    environment:
+      POSTGRES_DB: orders_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    ports:
+      - "5434:5432"
+    volumes:
+      - orders-data:/var/lib/postgresql/data
+
+  products-service-1:
+    build:
+      context: ./Products.Service
+    container_name: products-service-1
+    depends_on:
+      - products-db
+      - kafka-init
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Host=products-db;Database=products_db;Username=postgres;Password=postgres123
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - ASPNETCORE_URLS=http://+:80
+    restart: on-failure
+
+  products-service-2:
+    build:
+      context: ./Products.Service
+    container_name: products-service-2
+    depends_on:
+      - products-db
+      - kafka-init
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Host=products-db;Database=products_db;Username=postgres;Password=postgres123
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - ASPNETCORE_URLS=http://+:80
+    restart: on-failure
+
+  orders-service:
+    build:
+      context: ./Orders.Service
+    container_name: orders-service
+    ports:
+      - "8083:80"
+    depends_on:
+      - orders-db
+      - load-balancer
+      - kafka-init
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Host=orders-db;Database=orders_db;Username=postgres;Password=postgres123
+      - ProductsServiceUrl=http://load-balancer
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - ASPNETCORE_URLS=http://+:80
+    restart: on-failure
+
+  load-balancer:
+    build:
+      context: ./LoadBalancer
+    container_name: load-balancer
+    ports:
+      - "8082:80"
+    depends_on:
+      - products-service-1
+      - products-service-2
+    restart: always
+
+volumes:
+  products-data:
+  orders-data:

@@ -1,0 +1,13 @@
+## Visual Studio
+*.suo
+*.user
+[Dd]ebug/
+[Rr]elease/
+[Bb]in/
+[Oo]bj/
+.vs/
+*.nupkg
+*.db
+*.log
+.DS_Store
+Thumbs.db

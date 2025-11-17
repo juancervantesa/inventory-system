@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Orders.Service.Data;
+using Orders.Service.Handlers;
 using Orders.Service.Services;
 using Polly;
 using Polly.Extensions.Http;
@@ -18,10 +19,13 @@ var circuitBreakerPolicy = HttpPolicyExtensions
     .HandleTransientHttpError()
     .CircuitBreakerAsync(5, TimeSpan.FromSeconds(30));
 
+builder.Services.AddTransient<AuthenticationDelegatingHandler>();
+
 builder.Services.AddHttpClient<ProductsApiClient>(client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["ProductsServiceUrl"]);
 })
+.AddHttpMessageHandler<AuthenticationDelegatingHandler>()
 .AddPolicyHandler(retryPolicy)
 .AddPolicyHandler(circuitBreakerPolicy);
 

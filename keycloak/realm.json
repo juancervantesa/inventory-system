@@ -1,0 +1,31 @@
+{
+           "realm": "inventory-system-realm",
+           "enabled": true,
+           "clients": [
+             {
+               "clientId": "orders-service-client",
+               "secret": "orders-secret",
+               "serviceAccountsEnabled": true,
+               "publicClient": false,
+              "standardFlowEnabled": false,
+              "directAccessGrantsEnabled": false,
+              "protocolMappers": [
+                {
+                  "name": "products-audience-mapper",
+                  "protocol": "openid-connect",
+                  "protocolMapper": "oidc-audience-mapper",
+                  "config": {
+                    "id.token.claim": "false",
+                    "access.token.claim": "true",
+                    "included.custom.audience": "products-service-client"
+                  }
+                }
+              ]
+            },
+            {
+              "clientId": "products-service-client",
+              "publicClient": false,
+              "bearerOnly": true
+            }
+          ]
+}
